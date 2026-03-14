@@ -1,8 +1,8 @@
 {
   "closed_threshold": 0.3,
-  "hold_frames": 4,
+  "hold_frames": 3,
   "scroll_every_n_frames": 2,
-  "scroll_amount": 2,
+  "scroll_amount": 3,
   "look_straight_nose_x_min": 0.25,
   "look_straight_nose_x_max": 0.75,
   "look_straight_nose_y_min": 0.25,

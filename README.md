@@ -1,4 +1,4 @@
-# Facial Gesture Scroll
+# Close Eye Scroll
 
 Scroll with your eyes using the webcam: **keep your left eye closed** = scroll up, **keep your right eye closed** = scroll down. Brief blinks are ignored. Uses MediaPipe Face Landmarker and PyAutoGUI.
 

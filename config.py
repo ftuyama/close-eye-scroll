@@ -15,6 +15,7 @@ DEFAULTS = {
     "look_straight_nose_x_max": 0.65,
     "look_straight_nose_y_min": 0.35,
     "look_straight_nose_y_max": 0.55,
+    "look_straight_max_head_pitch_deg": 15.0,
 }
 
 

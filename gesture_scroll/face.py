@@ -43,9 +43,14 @@ EYE_BLINK_LEFT_INDEX = 9
 EYE_BLINK_RIGHT_INDEX = 10
 
 
+# Forehead and chin for head pitch (same as FACE_CENTER_INDICES minus nose)
+FOREHEAD_INDEX = 10
+CHIN_INDEX = 152
+
+
 @dataclass
 class FaceResult:
-    """Normalized (x, y) for nose tip and face center; eye blink scores 0–1; None if no face."""
+    """Normalized (x, y) for nose tip and face center; eye blink scores 0–1; head_pitch_deg; None if no face."""
     nose_x: float | None
     nose_y: float | None
     face_center_x: float | None
@@ -53,6 +58,7 @@ class FaceResult:
     landmarks: Any  # list of landmark-like (x, y, z) for drawing
     eye_blink_left: float | None = None   # 0=open, higher=more closed
     eye_blink_right: float | None = None
+    head_pitch_deg: float | None = None  # positive = looking down, negative = up, 0 = straight
 
 
 class FaceMeshDetector:
@@ -92,6 +98,7 @@ class FaceMeshDetector:
                 landmarks=None,
                 eye_blink_left=None,
                 eye_blink_right=None,
+                head_pitch_deg=None,
             )
 
         lm_list = result.face_landmarks[0]
@@ -111,12 +118,20 @@ class FaceMeshDetector:
                 elif c.index == EYE_BLINK_RIGHT_INDEX and c.score is not None:
                     eye_blink_right = c.score
 
+        # Head pitch from forehead–chin axis in y–z plane (positive = looking down)
+        forehead = lm_list[FOREHEAD_INDEX]
+        chin = lm_list[CHIN_INDEX]
+        dy = chin.y - forehead.y  # vertical in image (positive = chin below)
+        dz = chin.z - forehead.z  # depth: chin toward camera => dz > 0 when looking down
+        head_pitch_deg = float(np.degrees(np.arctan2(dz, dy))) if dy != 0 else 0.0
+
         return FaceResult(
             nose_x=nose_x, nose_y=nose_y,
             face_center_x=cx, face_center_y=cy,
             landmarks=lm_list,
             eye_blink_left=eye_blink_left,
             eye_blink_right=eye_blink_right,
+            head_pitch_deg=head_pitch_deg,
         )
 
     def close(self) -> None:
@@ -135,9 +150,12 @@ def is_looking_straight(
     nose_x_max: float = 0.65,
     nose_y_min: float = 0.35,
     nose_y_max: float = 0.55,
+    max_head_pitch_deg: float = 15.0,
 ) -> bool:
-    """True only when face is visible and nose is in the central region (looking straight at camera)."""
+    """True only when face is visible, nose is in the central region, and head pitch is within range (not looking down/up)."""
     if result.nose_x is None or result.nose_y is None:
+        return False
+    if result.head_pitch_deg is not None and abs(result.head_pitch_deg) > max_head_pitch_deg:
         return False
     return (
         nose_x_min <= result.nose_x <= nose_x_max

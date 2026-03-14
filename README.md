@@ -1,6 +1,6 @@
 # Facial Gesture Scroll
 
-Scroll with your face using the webcam: head movement is mapped to mouse scroll via MediaPipe face mesh and PyAutoGUI.
+Scroll with your eyes using the webcam: **keep your left eye closed** = scroll up, **keep your right eye closed** = scroll down. Brief blinks are ignored; only sustained eye closure triggers scrolling. Uses MediaPipe Face Landmarker (blendshapes) and PyAutoGUI.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ Scroll with your face using the webcam: head movement is mapped to mouse scroll 
    python -m gesture_scroll.cli
    ```
 
-A preview window shows the camera and face mesh. Move your head up/down (and optionally left/right) to scroll. Press **q** in the preview window to quit.
+A preview window shows the camera and face landmarks. **Keep your left eye closed** to scroll up, **keep your right eye closed** to scroll down; brief blinks do nothing. Press **q** in the preview window to quit.
 
 ## Options
 

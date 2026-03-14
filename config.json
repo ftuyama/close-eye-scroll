@@ -6,6 +6,6 @@
   "smoothing_alpha": 0.3,
   "scroll_vertical": true,
   "scroll_horizontal": false,
-  "invert_vertical": false,
+  "invert_vertical": true,
   "invert_horizontal": false
 }

@@ -38,14 +38,21 @@ def _get_model_path() -> Path:
     return path
 
 
+# Blendshape indices for eye blink (from face_landmarker.Blendshapes)
+EYE_BLINK_LEFT_INDEX = 9
+EYE_BLINK_RIGHT_INDEX = 10
+
+
 @dataclass
 class FaceResult:
-    """Normalized (x, y) for nose tip and face center; None if no face."""
+    """Normalized (x, y) for nose tip and face center; eye blink scores 0–1; None if no face."""
     nose_x: float | None
     nose_y: float | None
     face_center_x: float | None
     face_center_y: float | None
     landmarks: Any  # list of landmark-like (x, y, z) for drawing
+    eye_blink_left: float | None = None   # 0=open, higher=more closed
+    eye_blink_right: float | None = None
 
 
 class FaceMeshDetector:
@@ -64,6 +71,7 @@ class FaceMeshDetector:
             min_face_detection_confidence=min_detection_confidence,
             min_face_presence_confidence=min_tracking_confidence,
             min_tracking_confidence=min_tracking_confidence,
+            output_face_blendshapes=True,
         )
         self._landmarker = face_landmarker.FaceLandmarker.create_from_options(options)
         self._frame_timestamp_ms = 0
@@ -82,6 +90,8 @@ class FaceMeshDetector:
                 nose_x=None, nose_y=None,
                 face_center_x=None, face_center_y=None,
                 landmarks=None,
+                eye_blink_left=None,
+                eye_blink_right=None,
             )
 
         lm_list = result.face_landmarks[0]
@@ -91,10 +101,22 @@ class FaceMeshDetector:
         cx = sum(lm_list[i].x for i in FACE_CENTER_INDICES) / len(FACE_CENTER_INDICES)
         cy = sum(lm_list[i].y for i in FACE_CENTER_INDICES) / len(FACE_CENTER_INDICES)
 
+        eye_blink_left = None
+        eye_blink_right = None
+        if result.face_blendshapes and len(result.face_blendshapes) > 0:
+            categories = result.face_blendshapes[0]
+            for c in categories:
+                if c.index == EYE_BLINK_LEFT_INDEX and c.score is not None:
+                    eye_blink_left = c.score
+                elif c.index == EYE_BLINK_RIGHT_INDEX and c.score is not None:
+                    eye_blink_right = c.score
+
         return FaceResult(
             nose_x=nose_x, nose_y=nose_y,
             face_center_x=cx, face_center_y=cy,
             landmarks=lm_list,
+            eye_blink_left=eye_blink_left,
+            eye_blink_right=eye_blink_right,
         )
 
     def close(self) -> None:

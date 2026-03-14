@@ -160,48 +160,75 @@ def main() -> None:
         print("You can try a different device with --camera 1, etc.", file=sys.stderr)
         sys.exit(1)
 
-    print("Facial Gesture Scroll – use head movement to scroll. Press 'q' in preview to quit.")
+    # Scroll while keeping one eye closed; brief blinks are ignored
+    CLOSED_THRESHOLD = 0.4
+    HOLD_FRAMES = 8   # must be closed this many frames to count as "keep closed" (filters blinks)
+    SCROLL_EVERY_N_FRAMES = 6  # while keeping closed, scroll every N frames
+    SCROLL_AMOUNT = 2  # scroll steps per tick (positive = up, negative = down)
+
+    print("Facial Gesture Scroll – keep left eye closed = scroll up, right = scroll down. Blinks do nothing.")
     print("On macOS: enable Accessibility for Terminal/Cursor for scroll to work.")
-    print("Options: sensitivity={}, dead_zone={}".format(cfg["sensitivity"], cfg["dead_zone"]))
 
     show_preview = not args.no_preview
     detector = None
+    left_closed_frames = 0
+    right_closed_frames = 0
     try:
         detector = FaceMeshDetector()
-        prev_nose_x: float | None = None
-        prev_nose_y: float | None = None
 
         for ret, frame in frames(cap):
             if not ret or frame is None:
                 break
 
             result = detector.process(frame)
-            nose_x, nose_y = result.nose_x, result.nose_y
+            left = result.eye_blink_left
+            right = result.eye_blink_right
 
-            if nose_x is not None and nose_y is not None:
-                if prev_nose_x is not None and prev_nose_y is not None:
-                    dx = nose_x - prev_nose_x
-                    dy = nose_y - prev_nose_y
-                    scroll_x, scroll_y = scroll_ctrl.update(dx, dy)
-                    try:
-                        scroll_ctrl.perform_scroll(scroll_x, scroll_y)
-                    except pyautogui.FailSafeException:
-                        print("\nFail-safe triggered (mouse in corner). Quitting.")
-                        break
-                    if recorder is not None:
-                        recorder.write_frame(
-                            scroll_dx=scroll_x,
-                            scroll_dy=scroll_y,
-                            nose_dx=dx,
-                            nose_dy=dy,
-                            nose_x=nose_x,
-                            nose_y=nose_y,
-                            face_center_x=result.face_center_x,
-                            face_center_y=result.face_center_y,
-                        )
-                prev_nose_x, prev_nose_y = nose_x, nose_y
-            else:
-                prev_nose_x = prev_nose_y = None
+            if left is not None and right is not None:
+                left_closed = left > CLOSED_THRESHOLD
+                right_closed = right > CLOSED_THRESHOLD
+
+                if left_closed:
+                    left_closed_frames += 1
+                else:
+                    left_closed_frames = 0
+                if right_closed:
+                    right_closed_frames += 1
+                else:
+                    right_closed_frames = 0
+
+                # Only scroll when one eye has been closed for a sustained time (not a blink) and the other is open
+                if left_closed_frames >= HOLD_FRAMES and not right_closed:
+                    # Keep left closed → scroll up (every SCROLL_EVERY_N_FRAMES to avoid flooding)
+                    if (left_closed_frames - HOLD_FRAMES) % SCROLL_EVERY_N_FRAMES == 0:
+                        try:
+                            scroll_ctrl.perform_scroll(0, SCROLL_AMOUNT)
+                        except pyautogui.FailSafeException:
+                            print("\nFail-safe triggered (mouse in corner). Quitting.")
+                            break
+                        if recorder is not None:
+                            recorder.write_frame(
+                                scroll_dx=0, scroll_dy=SCROLL_AMOUNT,
+                                nose_dx=0, nose_dy=0,
+                                nose_x=result.nose_x, nose_y=result.nose_y,
+                                face_center_x=result.face_center_x, face_center_y=result.face_center_y,
+                            )
+                elif right_closed_frames >= HOLD_FRAMES and not left_closed:
+                    # Keep right closed → scroll down
+                    if (right_closed_frames - HOLD_FRAMES) % SCROLL_EVERY_N_FRAMES == 0:
+                        try:
+                            scroll_ctrl.perform_scroll(0, -SCROLL_AMOUNT)
+                        except pyautogui.FailSafeException:
+                            print("\nFail-safe triggered (mouse in corner). Quitting.")
+                            break
+                        if recorder is not None:
+                            recorder.write_frame(
+                                scroll_dx=0, scroll_dy=-SCROLL_AMOUNT,
+                                nose_dx=0, nose_dy=0,
+                                nose_x=result.nose_x, nose_y=result.nose_y,
+                                face_center_x=result.face_center_x, face_center_y=result.face_center_y,
+                            )
+                # Both closed or brief closure (blink) → do nothing
 
             if show_preview:
                 draw_landmarks(frame, result.landmarks)

@@ -1,11 +1,6 @@
 {
-  "sensitivity": 1.0,
-  "dead_zone": 0.02,
-  "scroll_scale": 50.0,
-  "max_scroll_per_frame": 15,
-  "smoothing_alpha": 0.3,
-  "scroll_vertical": true,
-  "scroll_horizontal": false,
-  "invert_vertical": true,
-  "invert_horizontal": false
+  "closed_threshold": 0.3,
+  "hold_frames": 4,
+  "scroll_every_n_frames": 2,
+  "scroll_amount": 2
 }

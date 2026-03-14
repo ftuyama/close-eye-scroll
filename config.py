@@ -7,15 +7,10 @@ from pathlib import Path
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 
 DEFAULTS = {
-    "sensitivity": 1.0,
-    "dead_zone": 0.02,
-    "scroll_scale": 50.0,
-    "max_scroll_per_frame": 15,
-    "smoothing_alpha": 0.3,
-    "scroll_vertical": True,
-    "scroll_horizontal": False,
-    "invert_vertical": False,
-    "invert_horizontal": False,
+    "closed_threshold": 0.4,
+    "hold_frames": 8,
+    "scroll_every_n_frames": 1,
+    "scroll_amount": 1,
 }
 
 

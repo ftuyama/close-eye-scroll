@@ -1,43 +1,27 @@
 # Facial Gesture Scroll
 
-Scroll with your eyes using the webcam: **keep your left eye closed** = scroll up, **keep your right eye closed** = scroll down. Brief blinks are ignored; only sustained eye closure triggers scrolling. Uses MediaPipe Face Landmarker (blendshapes) and PyAutoGUI.
+Scroll with your eyes using the webcam: **keep your left eye closed** = scroll up, **keep your right eye closed** = scroll down. Brief blinks are ignored. Uses MediaPipe Face Landmarker and PyAutoGUI.
 
 ## Requirements
 
 - Python 3.10+
 - Webcam
-- **macOS**: Terminal (or the app running the script) must have **Camera** and **Accessibility** permissions.  
-  **System Settings → Privacy & Security → Camera** and **Accessibility** → add Terminal (or Cursor/your IDE).
-- On first run, the face landmarker model (~10 MB) is downloaded automatically to the project folder.
+- **macOS**: **Camera** and **Accessibility** for Terminal (or your IDE):
+  **System Settings → Privacy & Security → Camera** and **Accessibility**
+- On first run, the face landmarker model (~10 MB) is downloaded to the project folder.
 
 ## Setup
 
-1. Create and activate the virtual environment (use the Python from your terminal):
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python run.py
+```
 
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   ```
+Or: `python -m gesture_scroll.cli`
 
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Run:
-
-   ```bash
-   python run.py
-   ```
-
-   Or as a module:
-
-   ```bash
-   python -m gesture_scroll.cli
-   ```
-
-A preview window shows the camera and face landmarks. **Keep your left eye closed** to scroll up, **keep your right eye closed** to scroll down; brief blinks do nothing. Press **q** in the preview window to quit.
+A preview window shows the camera and face landmarks. **Keep your left eye closed** to scroll up, **keep your right eye closed** to scroll down; brief blinks do nothing. Press **q** to quit.
 
 ## Options
 
@@ -52,40 +36,23 @@ A preview window shows the camera and face landmarks. **Keep your left eye close
 | `--scroll-horizontal` | Enable horizontal scroll. |
 | `--invert-vertical` / `--invert-horizontal` | Invert scroll direction. |
 | `--camera ID` | Camera device ID (default `0`). |
-| `--save-config` | Save current CLI options to `config.json` and exit. |
+| `--closed-threshold FLOAT` | Eye-closed blend threshold 0–1 (default `0.4`). |
+| `--hold-frames N` | Frames eye must stay closed before scrolling (default `8`). |
+| `--scroll-amount N` | Scroll steps per tick (default `2`). |
+| `--save-config` | Save current options to `config.json` and exit. |
 
-Examples:
+## Configuration
 
-```bash
-# Higher sensitivity, no preview
-python run.py --sensitivity 2.0 --no-preview
+`config.json` (created with `--save-config` or by hand) can set:
 
-# Record gestures to CSV (with landmark coordinates)
-python run.py --record gestures.csv --record-landmarks
-
-# Save your preferred options to config
-python run.py --sensitivity 1.5 --dead-zone 0.03 --save-config
-```
-
-## Configuration file
-
-Default settings are in `config.json` (created when you use `--save-config`). You can edit it to set:
-
-- `sensitivity`, `dead_zone`, `scroll_scale`, `max_scroll_per_frame`
-- `smoothing_alpha` (lower = smoother, less responsive)
-- `scroll_vertical`, `scroll_horizontal`, `invert_vertical`, `invert_horizontal`
+- `closed_threshold` – blend value above which eye is “closed”
+- `hold_frames` – frames closed before scroll starts, to ignore blinks
+- `scroll_every_n_frames` – scroll every N frames while eye stays closed
+- `scroll_amount` – scroll steps per tick
 
 ## Troubleshooting
 
-- **Scroll does nothing on macOS**  
-  Add Terminal (or Cursor) to **System Settings → Privacy & Security → Accessibility** and restart the app.
-
-- **Fontconfig / matplotlib cache errors**  
-  Set a writable cache directory before running, e.g.:  
-  `export MPLCONFIGDIR=$PWD/.mplcache`
-
-- **No face detected**  
-  Ensure good lighting and the camera can see your face. Try adjusting `--camera` if you have multiple cameras.
-
-- **"Fail-safe triggered" / app quits**  
-  PyAutoGUI stops the app when the mouse is in a screen corner (safety feature). Move the cursor away from the corners to avoid this, or press **q** in the preview to quit normally.
+- **Scroll does nothing** – Add Terminal (or your IDE) to **Accessibility** in System Settings.
+- **Fontconfig / matplotlib errors** – `export MPLCONFIGDIR=$PWD/.mplcache`
+- **No face detected** – Check lighting and try `--camera 1`.
+- **“Fail-safe triggered”** – PyAutoGUI quits when the mouse is in a corner; move the cursor or press **q** to quit normally.

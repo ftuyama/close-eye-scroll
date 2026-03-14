@@ -1,4 +1,4 @@
-"""CLI: argparse and main loop for gesture-scroll."""
+"""CLI and main loop for gesture-scroll (eye-close to scroll)."""
 from __future__ import annotations
 
 import argparse
@@ -6,21 +6,19 @@ import os
 import sys
 from pathlib import Path
 
-# Set writable matplotlib cache before any import that pulls in matplotlib (e.g. mediapipe)
 if "MPLCONFIGDIR" not in os.environ:
     _mpl_dir = Path(__file__).resolve().parent.parent / ".mplcache"
     _mpl_dir.mkdir(exist_ok=True)
     os.environ["MPLCONFIGDIR"] = str(_mpl_dir)
 
 import cv2
+import pyautogui
 
 from gesture_scroll.camera import open_camera, frames
 from gesture_scroll.face import FaceMeshDetector, draw_landmarks
-from gesture_scroll.scroll import ScrollController
-import pyautogui
+from gesture_scroll.scroll import perform_scroll
 from gesture_scroll.recorder import GestureRecorder
 
-# Config lives in project root (parent of gesture_scroll package)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
@@ -29,21 +27,7 @@ import config as project_config  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Scroll with your face: webcam + MediaPipe → PyAutoGUI scroll."
-    )
-    parser.add_argument(
-        "--sensitivity",
-        type=float,
-        default=None,
-        metavar="FLOAT",
-        help="Scroll sensitivity (e.g. 0.5–3.0). Overrides config.",
-    )
-    parser.add_argument(
-        "--dead-zone",
-        type=float,
-        default=None,
-        metavar="FLOAT",
-        help="Min movement before scrolling (normalized). Overrides config.",
+        description="Scroll with your eyes: keep left eye closed = up, right = down. Blinks ignored."
     )
     parser.add_argument(
         "--no-preview",
@@ -55,42 +39,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         metavar="FILE",
-        help="Record gesture data (deltas) to CSV file.",
+        help="Record scroll events to CSV.",
     )
     parser.add_argument(
         "--record-landmarks",
         action="store_true",
-        help="When recording, also save nose/face landmark coordinates.",
-    )
-    parser.add_argument(
-        "--scroll-vertical",
-        action="store_true",
-        default=None,
-        help="Enable vertical scroll (default: true).",
-    )
-    parser.add_argument(
-        "--no-scroll-vertical",
-        action="store_false",
-        dest="scroll_vertical",
-        help="Disable vertical scroll.",
-    )
-    parser.add_argument(
-        "--scroll-horizontal",
-        action="store_true",
-        default=None,
-        help="Enable horizontal scroll.",
-    )
-    parser.add_argument(
-        "--invert-vertical",
-        action="store_true",
-        default=None,
-        help="Invert vertical scroll direction.",
-    )
-    parser.add_argument(
-        "--invert-horizontal",
-        action="store_true",
-        default=None,
-        help="Invert horizontal scroll direction.",
+        help="When recording, include nose/face landmark coordinates.",
     )
     parser.add_argument(
         "--camera",
@@ -100,27 +54,41 @@ def parse_args() -> argparse.Namespace:
         help="Camera device ID (default 0).",
     )
     parser.add_argument(
+        "--closed-threshold",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help="Eye closed blend threshold 0–1 (default from config).",
+    )
+    parser.add_argument(
+        "--hold-frames",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Frames eye must stay closed to scroll (default from config).",
+    )
+    parser.add_argument(
+        "--scroll-amount",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Scroll steps per tick (default from config).",
+    )
+    parser.add_argument(
         "--save-config",
         action="store_true",
-        help="Save current CLI options to config.json and exit.",
+        help="Save current options to config.json and exit.",
     )
     return parser.parse_args()
 
 
 def apply_args_to_config(cfg: dict, args: argparse.Namespace) -> dict:
-    """Merge CLI args into config; None means do not override."""
-    if args.sensitivity is not None:
-        cfg["sensitivity"] = args.sensitivity
-    if args.dead_zone is not None:
-        cfg["dead_zone"] = args.dead_zone
-    if args.scroll_vertical is not None:
-        cfg["scroll_vertical"] = args.scroll_vertical
-    if args.scroll_horizontal is not None:
-        cfg["scroll_horizontal"] = args.scroll_horizontal
-    if args.invert_vertical is not None:
-        cfg["invert_vertical"] = args.invert_vertical
-    if args.invert_horizontal is not None:
-        cfg["invert_horizontal"] = args.invert_horizontal
+    if args.closed_threshold is not None:
+        cfg["closed_threshold"] = args.closed_threshold
+    if args.hold_frames is not None:
+        cfg["hold_frames"] = args.hold_frames
+    if args.scroll_amount is not None:
+        cfg["scroll_amount"] = args.scroll_amount
     return cfg
 
 
@@ -134,17 +102,21 @@ def main() -> None:
         print("Config saved to", project_config.CONFIG_PATH)
         return
 
-    scroll_ctrl = ScrollController(
-        sensitivity=cfg["sensitivity"],
-        dead_zone=cfg["dead_zone"],
-        scroll_scale=cfg["scroll_scale"],
-        max_scroll_per_frame=cfg["max_scroll_per_frame"],
-        smoothing_alpha=cfg["smoothing_alpha"],
-        scroll_vertical=cfg["scroll_vertical"],
-        scroll_horizontal=cfg["scroll_horizontal"],
-        invert_vertical=cfg["invert_vertical"],
-        invert_horizontal=cfg["invert_horizontal"],
-    )
+    try:
+        cap = open_camera(args.camera)
+    except RuntimeError:
+        print("Error: Could not open camera.", file=sys.stderr)
+        print("On macOS: grant Camera in System Settings → Privacy & Security → Camera.", file=sys.stderr)
+        print("Try --camera 1 for a different device.", file=sys.stderr)
+        sys.exit(1)
+
+    closed_threshold = cfg["closed_threshold"]
+    hold_frames = cfg["hold_frames"]
+    scroll_every_n = cfg["scroll_every_n_frames"]
+    scroll_amount = cfg["scroll_amount"]
+
+    print("Gesture Scroll – keep left eye closed = scroll up, right = scroll down. Blinks do nothing.")
+    print("On macOS: enable Accessibility for Terminal/Cursor. Press 'q' in preview to quit.")
 
     recorder: GestureRecorder | None = None
     if args.record:
@@ -152,42 +124,22 @@ def main() -> None:
         recorder.start()
         print("Recording to", args.record)
 
-    try:
-        cap = open_camera(args.camera)
-    except RuntimeError:
-        print("Error: Could not open camera.", file=sys.stderr)
-        print("On macOS: grant Camera access in System Settings → Privacy & Security → Camera.", file=sys.stderr)
-        print("You can try a different device with --camera 1, etc.", file=sys.stderr)
-        sys.exit(1)
-
-    # Scroll while keeping one eye closed; brief blinks are ignored
-    CLOSED_THRESHOLD = 0.4
-    HOLD_FRAMES = 8   # must be closed this many frames to count as "keep closed" (filters blinks)
-    SCROLL_EVERY_N_FRAMES = 6  # while keeping closed, scroll every N frames
-    SCROLL_AMOUNT = 2  # scroll steps per tick (positive = up, negative = down)
-
-    print("Facial Gesture Scroll – keep left eye closed = scroll up, right = scroll down. Blinks do nothing.")
-    print("On macOS: enable Accessibility for Terminal/Cursor for scroll to work.")
-
     show_preview = not args.no_preview
     detector = None
     left_closed_frames = 0
     right_closed_frames = 0
     try:
         detector = FaceMeshDetector()
-
         for ret, frame in frames(cap):
             if not ret or frame is None:
                 break
-
             result = detector.process(frame)
             left = result.eye_blink_left
             right = result.eye_blink_right
 
             if left is not None and right is not None:
-                left_closed = left > CLOSED_THRESHOLD
-                right_closed = right > CLOSED_THRESHOLD
-
+                left_closed = left > closed_threshold
+                right_closed = right > closed_threshold
                 if left_closed:
                     left_closed_frames += 1
                 else:
@@ -197,38 +149,34 @@ def main() -> None:
                 else:
                     right_closed_frames = 0
 
-                # Only scroll when one eye has been closed for a sustained time (not a blink) and the other is open
-                if left_closed_frames >= HOLD_FRAMES and not right_closed:
-                    # Keep left closed → scroll up (every SCROLL_EVERY_N_FRAMES to avoid flooding)
-                    if (left_closed_frames - HOLD_FRAMES) % SCROLL_EVERY_N_FRAMES == 0:
+                if left_closed_frames >= hold_frames and not right_closed:
+                    if (left_closed_frames - hold_frames) % scroll_every_n == 0:
                         try:
-                            scroll_ctrl.perform_scroll(0, SCROLL_AMOUNT)
+                            perform_scroll(0, scroll_amount)
                         except pyautogui.FailSafeException:
                             print("\nFail-safe triggered (mouse in corner). Quitting.")
                             break
                         if recorder is not None:
                             recorder.write_frame(
-                                scroll_dx=0, scroll_dy=SCROLL_AMOUNT,
+                                scroll_dx=0, scroll_dy=scroll_amount,
                                 nose_dx=0, nose_dy=0,
                                 nose_x=result.nose_x, nose_y=result.nose_y,
                                 face_center_x=result.face_center_x, face_center_y=result.face_center_y,
                             )
-                elif right_closed_frames >= HOLD_FRAMES and not left_closed:
-                    # Keep right closed → scroll down
-                    if (right_closed_frames - HOLD_FRAMES) % SCROLL_EVERY_N_FRAMES == 0:
+                elif right_closed_frames >= hold_frames and not left_closed:
+                    if (right_closed_frames - hold_frames) % scroll_every_n == 0:
                         try:
-                            scroll_ctrl.perform_scroll(0, -SCROLL_AMOUNT)
+                            perform_scroll(0, -scroll_amount)
                         except pyautogui.FailSafeException:
                             print("\nFail-safe triggered (mouse in corner). Quitting.")
                             break
                         if recorder is not None:
                             recorder.write_frame(
-                                scroll_dx=0, scroll_dy=-SCROLL_AMOUNT,
+                                scroll_dx=0, scroll_dy=-scroll_amount,
                                 nose_dx=0, nose_dy=0,
                                 nose_x=result.nose_x, nose_y=result.nose_y,
                                 face_center_x=result.face_center_x, face_center_y=result.face_center_y,
                             )
-                # Both closed or brief closure (blink) → do nothing
 
             if show_preview:
                 draw_landmarks(frame, result.landmarks)

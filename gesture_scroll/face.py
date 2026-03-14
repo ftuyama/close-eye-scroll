@@ -129,6 +129,22 @@ class FaceMeshDetector:
         self.close()
 
 
+def is_looking_straight(
+    result: FaceResult,
+    nose_x_min: float = 0.35,
+    nose_x_max: float = 0.65,
+    nose_y_min: float = 0.35,
+    nose_y_max: float = 0.55,
+) -> bool:
+    """True only when face is visible and nose is in the central region (looking straight at camera)."""
+    if result.nose_x is None or result.nose_y is None:
+        return False
+    return (
+        nose_x_min <= result.nose_x <= nose_x_max
+        and nose_y_min <= result.nose_y <= nose_y_max
+    )
+
+
 def draw_landmarks(frame: cv2.typing.MatLike, landmarks: Any) -> None:
     """Draw face landmarks on frame in-place (nose circle)."""
     if landmarks is None:

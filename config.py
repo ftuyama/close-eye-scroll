@@ -11,6 +11,10 @@ DEFAULTS = {
     "hold_frames": 8,
     "scroll_every_n_frames": 1,
     "scroll_amount": 1,
+    "look_straight_nose_x_min": 0.35,
+    "look_straight_nose_x_max": 0.65,
+    "look_straight_nose_y_min": 0.35,
+    "look_straight_nose_y_max": 0.55,
 }
 
 

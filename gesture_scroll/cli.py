@@ -15,7 +15,7 @@ import cv2
 import pyautogui
 
 from gesture_scroll.camera import open_camera, frames
-from gesture_scroll.face import FaceMeshDetector, draw_landmarks
+from gesture_scroll.face import FaceMeshDetector, draw_landmarks, is_looking_straight
 from gesture_scroll.scroll import perform_scroll
 from gesture_scroll.recorder import GestureRecorder
 
@@ -114,6 +114,12 @@ def main() -> None:
     hold_frames = cfg["hold_frames"]
     scroll_every_n = cfg["scroll_every_n_frames"]
     scroll_amount = cfg["scroll_amount"]
+    look_straight = (
+        cfg["look_straight_nose_x_min"],
+        cfg["look_straight_nose_x_max"],
+        cfg["look_straight_nose_y_min"],
+        cfg["look_straight_nose_y_max"],
+    )
 
     print("Gesture Scroll – keep left eye closed = scroll up, right = scroll down. Blinks do nothing.")
     print("On macOS: enable Accessibility for Terminal/Cursor. Press 'q' in preview to quit.")
@@ -137,7 +143,11 @@ def main() -> None:
             left = result.eye_blink_left
             right = result.eye_blink_right
 
-            if left is not None and right is not None:
+            # Only use closed-eye detection when looking straight at the camera
+            if not is_looking_straight(result, *look_straight) or left is None or right is None:
+                left_closed_frames = 0
+                right_closed_frames = 0
+            else:
                 left_closed = left > closed_threshold
                 right_closed = right > closed_threshold
                 if left_closed:
